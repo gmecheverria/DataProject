@@ -1,0 +1,149 @@
+SELECT *
+FROM PortfolioProject..CovidDeaths
+WHERE continent is not null
+ORDER BY 3,4
+
+SELECT Location, date, total_cases, new_cases, total_deaths, population
+FROM PortfolioProject..CovidDeaths
+WHERE continent is not null
+ORDER BY 1, 2
+
+-- Looking at Total Cases vs Total Deaths
+
+SELECT Location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 AS DeathPercentage
+FROM PortfolioProject..CovidDeaths
+WHERE location like '%states%' AND continent is not null
+ORDER BY 1, 2
+
+-- Looking at Total Cases vs Population
+
+SELECT Location, date, total_cases, population, (total_cases/population)*100 AS PopulationPercentage
+FROM PortfolioProject..CovidDeaths
+WHERE location like '%states%'AND continent is not null
+ORDER BY 1, 2
+
+-- Looking at Countries with Highest Infection Rate compared to Population
+
+SELECT Location, population, MAX(total_cases) AS HighestInfectionCount, MAX((total_cases/population))*100 AS PercentPopulationInfection
+FROM PortfolioProject..CovidDeaths
+--WHERE location like '%states%'
+GROUP BY location, population
+ORDER BY PercentPopulationInfection desc
+
+-- Showing Countries With Hightest Death Count per Population
+
+SELECT Location, MAX(cast(total_deaths as int)) AS TotalDeathCount
+FROM PortfolioProject..CovidDeaths
+WHERE continent is not null
+--WHERE location like '%states%'
+GROUP BY location
+ORDER BY TotalDeathCount desc
+
+-- Showing Contients With Highest Death Count per Population
+
+SELECT continent, MAX(cast(total_deaths as int)) AS TotalDeathCount
+FROM PortfolioProject..CovidDeaths
+WHERE continent is not null
+--WHERE location like '%states%'
+GROUP BY continent
+ORDER BY TotalDeathCount desc
+
+-- Global Numbers by Date
+
+SELECT date, SUM(new_cases) AS TotalCases, SUM(cast(new_deaths AS INT)) AS TotalDeaths, 
+	SUM(cast(new_deaths AS INT))/SUM(new_cases) *100 AS DeathPercentage
+FROM PortfolioProject..CovidDeaths
+--WHERE location like '%states%' 
+WHERE continent is not null
+GROUP BY date
+ORDER BY 1, 2
+
+-- Total Global Numbers
+
+SELECT SUM(new_cases) AS TotalCases, SUM(cast(new_deaths AS INT)) AS TotalDeaths, 
+	SUM(cast(new_deaths AS INT))/SUM(new_cases) *100 AS DeathPercentage
+FROM PortfolioProject..CovidDeaths
+--WHERE location like '%states%' 
+WHERE continent is not null
+--GROUP BY date
+ORDER BY 1, 2
+
+-- Looking at Total Population vs Vaccinations
+-- Use CTE
+
+WITH PopvsVac (Continent, Location, Date, Population, New_Vaccinations, RollingPeopleVaccinated)
+AS
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+	SUM(CONVERT(INT, vac.new_vaccinations)) OVER (Partition by dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM PortfolioProject..CovidDeaths dea
+JOIN PortfolioProject..CovidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent is not null
+)
+
+SELECT *, (RollingPeopleVaccinated/population) * 100
+FROM PopvsVac
+
+-- Temp Table
+
+Drop table if exists #PercentPopulationVaccinated -- if alteration is made
+Create Table #PercentPopulationVaccinated
+(
+Continent nvarchar(255), 
+Location nvarchar(255), 
+Date datetime, 
+Population numeric, 
+New_Vaccinations numeric, 
+RollingPeopleVaccinated numeric
+)
+
+Insert into #PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+	SUM(CONVERT(INT, vac.new_vaccinations)) OVER (Partition by dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM PortfolioProject..CovidDeaths dea
+JOIN PortfolioProject..CovidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent is not null
+
+SELECT *, (RollingPeopleVaccinated/population) * 100
+FROM #PercentPopulationVaccinated
+
+-- Creating View to store data for later visualizations
+
+USE PortfolioProject
+GO
+CREATE VIEW PercentPopulationVaccinated AS
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+	SUM(CONVERT(INT, vac.new_vaccinations)) OVER (Partition by dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM PortfolioProject..CovidDeaths dea
+JOIN PortfolioProject..CovidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent is not null
+
+USE PortfolioProject
+GO
+CREATE VIEW CountriesDeathCount AS
+SELECT Location, MAX(cast(total_deaths as int)) AS TotalDeathCount
+FROM PortfolioProject..CovidDeaths
+WHERE continent is not null
+GROUP BY location
+
+USE PortfolioProject
+GO
+CREATE VIEW ContinentDeathCount AS
+SELECT continent, MAX(cast(total_deaths as int)) AS TotalDeathCount
+FROM PortfolioProject..CovidDeaths
+WHERE continent is not null
+GROUP BY continent
+
+USE PortfolioProject
+GO
+CREATE VIEW HighestInfectionRate AS
+SELECT Location, population, MAX(total_cases) AS HighestInfectionCount, MAX((total_cases/population))*100 AS PercentPopulationInfection
+FROM PortfolioProject..CovidDeaths
+WHERE continent is not null
+GROUP BY location, population
